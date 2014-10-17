@@ -8,6 +8,7 @@ import sys
 
 #HAAR_PATH = "/home/ahwitz/development/opencv-2.4.7/data/haarcascades/"
 SCREEN = [640, 360]
+RED = pygame.Color(255, 0, 0, 0)
 components = []
 # Face
 #FACE_HAAR = os.path.join(HAAR_PATH, "haarcascade_frontalface_default.xml")
@@ -35,45 +36,63 @@ class componentCollection(object):
 
         self.components.append(connectedComponent(pixel))
 
-    def combinedLength(self):
-        return sum(len(x.pixels) for x in self.components)
+    def draw(self, image):
+        for curComp in self.components:
+            curComp.draw(image)
 
 class connectedComponent(object):
     def __init__(self, initPix):
-        self.pixels = []
-        self.pixels.append(initPix)
+        self.xVals = [initPix[0], initPix[0]]
+        self.yVals = [initPix[1], initPix[1]]
 
     def nextTo(self, pixel):
         curX, curY = pixel
         xCheck = False
         yCheck = False
 
-        xVals = [x for (x, y) in self.pixels]
-        yVals = [y for (x, y) in self.pixels]
-
-        if (curX + 1) in xVals or curX in xVals or (curX - 1) in xVals:
+        if curX in range(self.xVals[0], self.xVals[1]):
             xCheck = True
+        elif curX == self.xVals[0] - 1:
+            xCheck = True
+            self.xVals[0] = curX
+        elif curX == self.xVals[1] + 1:
+            xCheck = True
+            self.xVals[1] = curX
 
-        if (curY + 1) in yVals or curY in yVals or (curY - 1) in yVals:
+        if curY in range(self.yVals[0], self.yVals[1]):
             yCheck = True
+        elif curY == self.yVals[0] - 1:
+            yCheck = True
+            self.yVals[0] = curY
+        elif curY == self.yVals[1] + 1:
+            yCheck = True
+            self.yVals[1] = curY
 
         if xCheck and yCheck:
-            self.pixels.append(pixel)
             return True
 
         return False
 
-def detect_green(image, cv_image):
+    def draw(self, image):
+        for curX in range(self.xVals[0], self.xVals[1]):
+            image.set_at((curX, self.yVals[0]), RED)
+            image.set_at((curX, self.yVals[1]), RED)
+
+        for curY in range(self.yVals[0], self.yVals[1]):
+            image.set_at((self.xVals[0], curY), RED)
+            image.set_at((self.xVals[1], curY), RED)
+
+
+def detect_green(image):
     width, height = image.get_size()
     for x in range(0, width):
         for y in range(0, height):
             pixel = (x, y)
             r, g, b, a = image.get_at(pixel)
-            if g > r and g > b:
+            if g > r + 30 and g > b + 30:
                 collection.addPixel(pixel)
     #print dir(cv_image)
-    print len(collection.components), "found, length of", collection.combinedLength()
-    sys.exit()
+    print len(collection.components), "found, length of"
 
 def cvimage_to_pygame(image):
     """Convert cvimage into a pygame image"""
@@ -111,11 +130,12 @@ collection = componentCollection()
 while 1:
     #time.sleep(1/1000)
     image = cam.get_image()
-    cv_image = pygame_to_cvimage(image)
+    #cv_image = pygame_to_cvimage(image)
     #storage = cv.CreateMemStorage(-1)
     #points = detect_faces(cv_image, storage)
     #cv_image = draw_from_points(cv_image, points)
-    detect_green(image, cv_image)
+    detect_green(image)
+    collection.draw(image)
     screen.fill([0, 0, 0])
-    screen.blit(cvimage_to_pygame(cv_image), (0, 0))
+    screen.blit(image, (0, 0))
     pygame.display.update()
