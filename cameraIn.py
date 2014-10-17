@@ -40,6 +40,23 @@ class componentCollection(object):
         for curComp in self.components:
             curComp.draw(image)
 
+    def mergeCheck(self):
+        toDel = []
+        for origComp in self.components:
+            topLeft = tuple(origComp.xVals)
+            botRight = tuple(origComp.yVals)
+
+            for curComp in self.components:
+                if curComp in toDel:
+                    continue
+                if curComp.nextTo(topLeft) or curComp.nextTo(botRight):
+                    curComp.mergeWith(origComp)
+                    toDel.append(origComp)
+                    break
+
+        for curComp in toDel:
+            self.components.remove(curComp)
+
 class connectedComponent(object):
     def __init__(self, initPix):
         self.xVals = [initPix[0], initPix[0]]
@@ -82,15 +99,33 @@ class connectedComponent(object):
             image.set_at((self.xVals[0], curY), RED)
             image.set_at((self.xVals[1], curY), RED)
 
+    def mergeWith(self, otherComp):
+        ulx, lrx = otherComp.xVals
+        uly, lry = otherComp.yVals
+
+        if ulx < self.xVals[0]:
+            self.xVals[0] = ulx
+        if lrx > self.xVals[1]:
+            self.xVals[1] = lrx
+        if uly < self.yVals[0]:
+            self.yVals[0] = uly
+        if lry > self.yVals[1]:
+            self.yVals[1] = lry
 
 def detect_green(image):
     width, height = image.get_size()
+    mergeCount = 0
     for x in range(0, width):
         for y in range(0, height):
             pixel = (x, y)
             r, g, b, a = image.get_at(pixel)
             if g > r + 30 and g > b + 30:
                 collection.addPixel(pixel)
+        if mergeCount == 4:
+            collection.mergeCheck()
+            mergeCount = 0
+        else:
+            mergeCount += 1
     #print dir(cv_image)
     print len(collection.components), "found, length of"
 
@@ -136,6 +171,9 @@ while 1:
     #cv_image = draw_from_points(cv_image, points)
     detect_green(image)
     collection.draw(image)
+    collection.components = [] #eventually work with the ones that exist
+    print collection.components
+
     screen.fill([0, 0, 0])
     screen.blit(image, (0, 0))
     pygame.display.update()
