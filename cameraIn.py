@@ -26,36 +26,38 @@ def cvimage_grayscale(cv_image):
 
 class componentCollection(object):
     def __init__(self):
-        self.components = []
+        self.components = {}
+        self.componentID = 0
+        self.pixels = {}
         print "Initializing collection."
 
     def addPixel(self, pixel):
-        for curComp in self.components:
-            if curComp.nextTo(pixel):
-                return True
+        pixelFound = -1
+        toDel = []
+        for compID in self.components:
+            if self.components[compID].nextTo(pixel):
+                if pixelFound > -1:
+                    self.components[pixelFound].mergeWith(self.components[compID])
+                    toDel.append(compID)
+                else:
+                    pixelFound = compID
 
-        self.components.append(connectedComponent(pixel))
+        if pixelFound > -1:
+            for curComp in toDel:
+                print self.components.keys()
+                print curComp
+                del self.components[curComp]
+                print self.components.keys()
+                time.sleep(2)
+            #print len(toDel)
+        else:
+            self.components[self.componentID] = connectedComponent(pixel)
+            self.componentID += 1
 
     def draw(self, image):
+        print self.componentID, len(self.components)
         for curComp in self.components:
-            curComp.draw(image)
-
-    def mergeCheck(self):
-        toDel = []
-        for origComp in self.components:
-            topLeft = tuple(origComp.xVals)
-            botRight = tuple(origComp.yVals)
-
-            for curComp in self.components:
-                if curComp in toDel:
-                    continue
-                if curComp.nextTo(topLeft) or curComp.nextTo(botRight):
-                    curComp.mergeWith(origComp)
-                    toDel.append(origComp)
-                    break
-
-        for curComp in toDel:
-            self.components.remove(curComp)
+            self.components[curComp].draw(image)
 
 class connectedComponent(object):
     def __init__(self, initPix):
@@ -67,23 +69,23 @@ class connectedComponent(object):
         xCheck = False
         yCheck = False
 
-        if curX in range(self.xVals[0], self.xVals[1]):
+        if curX > self.xVals[0] and curX < self.xVals[1]:
             xCheck = True
         elif curX == self.xVals[0] - 1:
             xCheck = True
-            self.xVals[0] = curX
+            self.xVals[0] -= 1
         elif curX == self.xVals[1] + 1:
             xCheck = True
-            self.xVals[1] = curX
+            self.xVals[1] += 1
 
-        if curY in range(self.yVals[0], self.yVals[1]):
+        if curY > self.yVals[0] and curY < self.yVals[1]:
             yCheck = True
         elif curY == self.yVals[0] - 1:
             yCheck = True
-            self.yVals[0] = curY
+            self.yVals[0] -= 1
         elif curY == self.yVals[1] + 1:
             yCheck = True
-            self.yVals[1] = curY
+            self.yVals[1] += 1
 
         if xCheck and yCheck:
             return True
@@ -114,19 +116,12 @@ class connectedComponent(object):
 
 def detect_green(image):
     width, height = image.get_size()
-    mergeCount = 0
     for x in range(0, width):
         for y in range(0, height):
             pixel = (x, y)
             r, g, b, a = image.get_at(pixel)
             if g > r + 30 and g > b + 30:
                 collection.addPixel(pixel)
-        if mergeCount == 4:
-            collection.mergeCheck()
-            mergeCount = 0
-        else:
-            mergeCount += 1
-    #print dir(cv_image)
     print len(collection.components), "found, length of"
 
 def cvimage_to_pygame(image):
@@ -171,7 +166,8 @@ while 1:
     #cv_image = draw_from_points(cv_image, points)
     detect_green(image)
     collection.draw(image)
-    collection.components = [] #eventually work with the ones that exist
+    collection.components = {} #eventually work with the ones that exist
+    collection.componentID = 0
     print collection.components
 
     screen.fill([0, 0, 0])
