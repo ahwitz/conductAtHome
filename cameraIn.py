@@ -7,7 +7,7 @@ import os
 import sys
 
 #HAAR_PATH = "/home/ahwitz/development/opencv-2.4.7/data/haarcascades/"
-SCREEN = [640, 360]
+SCREEN = [420, 240]
 RED = pygame.Color(255, 0, 0, 0)
 components = []
 # Face
@@ -32,32 +32,60 @@ class componentCollection(object):
         print "Initializing collection."
 
     def addPixel(self, pixel):
-        pixelFound = -1
-        toDel = []
+        #pixelFound = -1
+        #toDel = []
         for compID in self.components:
             if self.components[compID].nextTo(pixel):
-                if pixelFound > -1:
-                    self.components[pixelFound].mergeWith(self.components[compID])
-                    toDel.append(compID)
-                else:
-                    pixelFound = compID
+                return
 
-        if pixelFound > -1:
-            for curComp in toDel:
-                print self.components.keys()
-                print curComp
-                del self.components[curComp]
-                print self.components.keys()
-                time.sleep(2)
-            #print len(toDel)
-        else:
-            self.components[self.componentID] = connectedComponent(pixel)
-            self.componentID += 1
+        self.components[self.componentID] = connectedComponent(pixel)
+        self.componentID += 1
+        self.mergeCheck()
 
     def draw(self, image):
-        print self.componentID, len(self.components)
         for curComp in self.components:
             self.components[curComp].draw(image)
+
+    def mergeCheck(self):
+        toSkip = []
+        for curComp in self.components:
+            if curComp not in toSkip:
+                for curCompareComp in self.components:
+                    if curCompareComp == curComp:
+                        continue
+                    elif curCompareComp in toSkip:
+                        continue
+                    else:
+                        curXVals = self.components[curComp].xVals
+                        curYVals = self.components[curComp].yVals
+                        compXVals = self.components[curCompareComp].xVals
+                        compYVals = self.components[curCompareComp].yVals
+
+                        xMatch = False
+                        yMatch = False
+
+                        if curXVals[1] >= compXVals[0] and curXVals[1] <= compXVals[1]:
+                            xMatch = True
+                        elif curXVals[0] >= compXVals[0] and curXVals[0] <= compXVals[1]:
+                            xMatch = True
+
+                        if not xMatch:
+                            continue
+
+                        if curYVals[1] >= compYVals[0] and curYVals[1] <= compYVals[1]:
+                            yMatch = True
+                        elif curYVals[0] >= compYVals[0] and curYVals[0] <= compYVals[1]:
+                            yMatch = True
+
+                        if not yMatch:
+                            continue
+
+                        toSkip.append(curCompareComp)
+                        self.components[curComp].mergeWith(curCompareComp)
+                        #TODO: since the edge values are here, move mergeWith code to this function)
+        
+        for curComp in toSkip:
+            del self.components[curComp]
 
 class connectedComponent(object):
     def __init__(self, initPix):
@@ -102,8 +130,8 @@ class connectedComponent(object):
             image.set_at((self.xVals[1], curY), RED)
 
     def mergeWith(self, otherComp):
-        ulx, lrx = otherComp.xVals
-        uly, lry = otherComp.yVals
+        ulx, lrx = collection.components[otherComp].xVals
+        uly, lry = collection.components[otherComp].yVals
 
         if ulx < self.xVals[0]:
             self.xVals[0] = ulx
@@ -120,9 +148,8 @@ def detect_green(image):
         for y in range(0, height):
             pixel = (x, y)
             r, g, b, a = image.get_at(pixel)
-            if g > r + 30 and g > b + 30:
+            if g > r + 50 and g > b + 50:
                 collection.addPixel(pixel)
-    print len(collection.components), "found, length of"
 
 def cvimage_to_pygame(image):
     """Convert cvimage into a pygame image"""
@@ -168,7 +195,6 @@ while 1:
     collection.draw(image)
     collection.components = {} #eventually work with the ones that exist
     collection.componentID = 0
-    print collection.components
 
     screen.fill([0, 0, 0])
     screen.blit(image, (0, 0))
