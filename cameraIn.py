@@ -10,7 +10,7 @@ import sys
 WIDTH = 420
 HEIGHT = 240
 RED = pygame.Color(255, 0, 0, 0)
-COLOR_THRESHOLD = 20
+COLOR_THRESHOLD = 30
 SCREEN = [WIDTH, HEIGHT]
 
 def cvimage_grayscale(cv_image):
@@ -19,39 +19,73 @@ def cvimage_grayscale(cv_image):
     cv.CvtColor(cv_image, grayscale, cv.CV_RGB2GRAY)
     return grayscale 
 
+#takes (x, y) location
+def isGreen(pixel):
+    r, g, b, a = image.get_at(pixel)
+    return (g > r + COLOR_THRESHOLD and g > b + COLOR_THRESHOLD)
+
 class componentCollection(object):
     def __init__(self):
         self.components = {}
         self.oldComponents = {}
         self.componentID = 0
+        self.activeComponent = False
         self.pixels = {}
-        self.checkedPix = []
+        self.checkedPix = {} # a dict of x: [y1, y2, y3]; the alternative is a [], where using the "in" operator ain't gonna happen
         print "Initializing collection."
 
-    def determineMoved(self):
+    def update(self):
         for curCompID in self.oldComponents:
-            curComp = self.oldComponents[curCompID]
-            horizCenter = int((curComp.xVals[1] - curComp.xVals[0]) / 2) + curComp.xVals[0]
-            vertCenter = int((curComp.yVals[1] - curComp.yVals[0]) / 2) + curComp.yVals[0]
+            self.activeComponent = curCompID
+            ulx, uly, lrx, lry = self.oldComponents[curCompID].getVals()
+            horizCenter = int((lrx - ulx) / 2) + ulx
+            vertCenter = int((lry - uly) / 2) + uly
+            #print "for", curComp.xVals, curComp.yVals, "center is", horizCenter, vertCenter, "total", int((curComp.xVals[1] - curComp.xVals[0]) / 2) * int((curComp.yVals[1] - curComp.yVals[0]) / 2) 
             pixel = (horizCenter, vertCenter)
-            r, g, b, a = image.get_at(pixel)
-            if g > r + COLOR_THRESHOLD and g > b + COLOR_THRESHOLD:
-                self.components[self.componentID] = connectedComponent(pixel)
-                self.spiralExpand(pixel)
-                self.componentID += 1
-                self.checkedPix = []
+            
+            for curX in range(ulx - 1, lrx + 1):
+                for curY in range(uly - 1, lry + 1):
+                    curPixel = (curX, curY)
+                    self.safeCheck(curX, curY)
+                    if(isGreen(curPixel)):
+                        if curCompID in self.components:
+                            self.components[self.activeComponent].nextTo(curPixel)
+                            self.spiralExpand(curPixel)
+                        else:
+                            self.components[self.activeComponent] = connectedComponent(curPixel)
+                            self.spiralExpand(curPixel)
+            #print "\t new total", int((curCompAlt.xVals[1] - curCompAlt.xVals[0]) / 2) * int((curCompAlt.yVals[1] - curCompAlt.yVals[0]) / 2) 
+        self.activeComponent = False
+        if len(self.components) != len(self.oldComponents) or len(self.components) == 0:
+            for x in range(0, WIDTH):
+                for y in range(0, HEIGHT):
+                    if self.safeCheck(x, y):
+                        pixel = (x, y)
+                        if isGreen(pixel):
+                            collection.addPixel(pixel)
 
-        return (self.componentID > 0)
+        self.oldComponents = {}
+
+    #checks whether (x, y) has been checked already; adds and returns true if it hasn't
+    def safeCheck(self, x, y):
+        if x in self.checkedPix:
+            if y in self.checkedPix[x]:
+                return False
+            else:
+                self.checkedPix[x].append(y)
+                return True
+        else:
+            self.checkedPix[x] = [y]
+            return True
+
 
     def spiralExpand(self, curPixel):
         x, y = curPixel
-        r, g, b, a = image.get_at(curPixel)
-        if g > r + COLOR_THRESHOLD and g > b + COLOR_THRESHOLD:
-            self.components[self.componentID].nextTo(curPixel)
+        if(isGreen(curPixel)):
+            self.components[self.activeComponent].nextTo(curPixel)
             for xVal in range(x - 1, x + 1):
                 for yVal in range(y - 1, y + 1):
-                    if (xVal, yVal) not in self.checkedPix:
-                        self.checkedPix.append((xVal, yVal))
+                    if self.safeCheck(xVal, yVal):
                         self.spiralExpand((xVal, yVal))
 
     def addPixel(self, pixel):
@@ -60,6 +94,9 @@ class componentCollection(object):
                 return
 
         self.components[self.componentID] = connectedComponent(pixel)
+        self.activeComponent = self.componentID
+        self.spiralExpand(pixel)
+        self.activeComponent = False
         self.componentID += 1
         self.mergeCheck()
 
@@ -68,7 +105,7 @@ class componentCollection(object):
             self.components[curComp].draw()
         self.oldComponents = self.components
         self.components = {}
-        self.componentID = 0
+        self.checkedPix = {}
 
     def mergeCheck(self):
         toSkip = []
@@ -116,6 +153,9 @@ class connectedComponent(object):
         self.xVals = [initPix[0], initPix[0]]
         self.yVals = [initPix[1], initPix[1]]
         self.tracked = False
+
+    def getVals(self):
+        return self.xVals[0], self.yVals[0], self.xVals[1], self.yVals[1]
 
     def nextTo(self, pixel):
         #todo: add override parameter for when spiralExpand adds pixels that it knows will work
@@ -168,16 +208,6 @@ class connectedComponent(object):
         if lry > self.yVals[1]:
             self.yVals[1] = lry
 
-def detect_green():
-    if not collection.determineMoved():
-        width, height = image.get_size()
-        for x in range(0, width):
-            for y in range(0, height):
-                pixel = (x, y)
-                r, g, b, a = image.get_at(pixel)
-                if g > r + COLOR_THRESHOLD and g > b + COLOR_THRESHOLD:
-                    collection.addPixel(pixel)
-
 def cvimage_to_pygame(image):
     """Convert cvimage into a pygame image"""
     image_rgb = cv.CreateMat(image.height, image.width, cv.CV_8UC3)
@@ -212,18 +242,24 @@ cam.start()
 collection = componentCollection()
 image = ""
 
+oldTime = int(time.time())
+passedFrames = 0
+fpsVector = []
+
 while 1:
-    #time.sleep(1/1000)
     image = cam.get_image()
-    #cv_image = pygame_to_cvimage(image)
-    #storage = cv.CreateMemStorage(-1)
-    #points = detect_faces(cv_image, storage)
-    #cv_image = draw_from_points(cv_image, points)
-    detect_green()
+    collection.update()
     collection.draw()
-    #collection.components = {} #eventually work with the ones that exist
-    #collection.componentID = 0
 
     screen.fill([0, 0, 0])
     screen.blit(image, (0, 0))
     pygame.display.update()
+
+    newTime = int(time.time())
+    if newTime != oldTime:
+        oldTime = newTime
+        fpsVector.append(passedFrames)
+        print passedFrames, "fps", sum(fpsVector) / len(fpsVector), "avg"
+        passedFrames = 0
+    else:
+        passedFrames += 1
