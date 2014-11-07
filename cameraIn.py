@@ -6,22 +6,27 @@ import cv
 import time
 import os
 import sys
+import inspect
 
-WIDTH = 420
-HEIGHT = 240
+WIDTH = 630
+HEIGHT = 360
 RED = pygame.Color(255, 0, 0, 0)
 COLOR_THRESHOLD = 30
 SCREEN = [WIDTH, HEIGHT]
 
-def cvimage_grayscale(cv_image):
-    """Converts a cvimage into grayscale"""
-    grayscale = cv.CreateImage(cv.GetSize(cv_image), 8, 1)
-    cv.CvtColor(cv_image, grayscale, cv.CV_RGB2GRAY)
-    return grayscale 
-
 #takes (x, y) location
-def isGreen(pixel):
-    r, g, b, a = image.get_at(pixel)
+def isGreen(x, y):
+    try:
+        r, g, b, a = image.get_at((x, y))
+    except IndexError:
+        if x < 0 or x > (WIDTH - 1):
+            return False
+        if y < 0 or y > (HEIGHT - 1):
+            return False
+        else:
+            print "unknown error"
+            return False
+
     return (g > r + COLOR_THRESHOLD and g > b + COLOR_THRESHOLD)
 
 class componentCollection(object):
@@ -46,28 +51,30 @@ class componentCollection(object):
             for curX in range(ulx - 1, lrx + 1):
                 for curY in range(uly - 1, lry + 1):
                     curPixel = (curX, curY)
-                    self.safeCheck(curX, curY)
-                    if(isGreen(curPixel)):
+                    self.checkedCheck(curX, curY)
+                    if(isGreen(curX, curY)):
                         if curCompID in self.components:
                             self.components[self.activeComponent].nextTo(curPixel)
                             self.spiralExpand(curPixel)
                         else:
                             self.components[self.activeComponent] = connectedComponent(curPixel)
                             self.spiralExpand(curPixel)
+                        self.mergeCheck()
             #print "\t new total", int((curCompAlt.xVals[1] - curCompAlt.xVals[0]) / 2) * int((curCompAlt.yVals[1] - curCompAlt.yVals[0]) / 2) 
         self.activeComponent = False
-        if len(self.components) != len(self.oldComponents) or len(self.components) == 0:
-            for x in range(0, WIDTH):
-                for y in range(0, HEIGHT):
-                    if self.safeCheck(x, y):
-                        pixel = (x, y)
-                        if isGreen(pixel):
-                            collection.addPixel(pixel)
+
+        #this is not a speed issue: benchmarked at 26fps with this, 27 without
+        for x in range(0, WIDTH, 5): #check by 5s, spiralExpand still goes by 1s
+            for y in range(0, HEIGHT, 5):
+                if self.checkedCheck(x, y):
+                    pixel = (x, y)
+                    if isGreen(x, y):
+                        collection.addPixel(pixel)
 
         self.oldComponents = {}
 
-    #checks whether (x, y) has been checked already; adds and returns true if it hasn't
-    def safeCheck(self, x, y):
+    #checks whether (x, y) has been checked already or is in valid pixel range; adds and returns true if it hasn't
+    def checkedCheck(self, x, y):
         if x in self.checkedPix:
             if y in self.checkedPix[x]:
                 return False
@@ -81,11 +88,11 @@ class componentCollection(object):
 
     def spiralExpand(self, curPixel):
         x, y = curPixel
-        if(isGreen(curPixel)):
+        if(isGreen(x, y)):
             self.components[self.activeComponent].nextTo(curPixel)
             for xVal in range(x - 1, x + 1):
                 for yVal in range(y - 1, y + 1):
-                    if self.safeCheck(xVal, yVal):
+                    if self.checkedCheck(xVal, yVal):
                         self.spiralExpand((xVal, yVal))
 
     def addPixel(self, pixel):
@@ -208,31 +215,6 @@ class connectedComponent(object):
         if lry > self.yVals[1]:
             self.yVals[1] = lry
 
-def cvimage_to_pygame(image):
-    """Convert cvimage into a pygame image"""
-    image_rgb = cv.CreateMat(image.height, image.width, cv.CV_8UC3)
-    cv.CvtColor(image, image_rgb, cv.CV_BGR2RGB)
-    return pygame.image.frombuffer(image.tostring(), cv.GetSize(image_rgb),
-"RGB")
-
-def draw_from_points(cv_image, points):
-    """Takes the cv_image and points and draws a rectangle based on the points.
-Returns a cv_image."""
-    for (x, y, w, h), n in points:
-        cv.Rectangle(cv_image, (x, y), (x + w, y + h), 255)
-    return cv_image
-
-def pygame_to_cvimage(surface):
-    """Convert a pygame surface into a cv image"""
-    cv_image = cv.CreateImageHeader(surface.get_size(), cv.IPL_DEPTH_8U, 3)
-    image_string = surface_to_string(surface)
-    cv.SetData(cv_image, image_string)
-    return cv_image    
- 
-def surface_to_string(surface):
-    """Convert a pygame surface into string"""
-    return pygame.image.tostring(surface, 'RGB')
-
 pygame.init()
 pygame.camera.init()
 
@@ -263,3 +245,5 @@ while 1:
         passedFrames = 0
     else:
         passedFrames += 1
+
+    #time.sleep(0.5)
